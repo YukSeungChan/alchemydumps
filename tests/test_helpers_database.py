@@ -19,7 +19,7 @@ class TestSQLAlchemyHelper(TestCase):
     def test_mapped_classes(self):
         with app.app_context():
             alchemy = AlchemyDumpsDatabase()
-            classes = alchemy.get_mapped_classes()
+            classes = alchemy.get_mapped_tables()
             self.assertIn(User, classes)
             self.assertIn(Post, classes)
             self.assertEqual(len(classes), 2)

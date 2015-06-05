@@ -7,9 +7,9 @@ def readme():
     with open('README.rst') as f:
         return f.read()
 
-setup(name='Flask-AlchemyDumps',
+setup(name='AlchemyDumps',
       version='0.0.6',
-      description='SQLAlchemy backup/dump tool for Flask',
+      description='SQLAlchemy backup/dump tool',
       long_description=readme(),
       classifiers=[
           'Development Status :: 3 - Alpha',
@@ -28,9 +28,6 @@ setup(name='Flask-AlchemyDumps',
       license='MIT',
       packages=find_packages(exclude=['tests']),
       install_requires=[
-          'Flask',
-          'Flask-Script',
-          'Flask-SQLAlchemy',
           'SQLAlchemy',
           'Unipath'
       ],

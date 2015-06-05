@@ -3,17 +3,25 @@
 import gzip
 import re
 from datetime import datetime
-from flask import current_app
 from ftplib import FTP, error_perm
 from tempfile import mkstemp
 from time import gmtime, strftime
 from unipath import Path
 
+default_config = {
+    'BASE_DIR': '',
+    'ALCHEMYDUMPS_FTP_SERVER': False,
+    'ALCHEMYDUMPS_FTP_USER': '',
+    'ALCHEMYDUMPS_FTP_PASSWORD': '',
+    'ALCHEMYDUMPS_FTP_PATH': '',
+}
+
 
 class Backup(object):
     """Manages backup files through local or FTP file systems"""
 
-    def __init__(self):
+    def __init__(self, config=default_config):
+        self.config = config
         self.ftp = self.__get_ftp()
         self.path = self.__get_path()
         self.files = self.__get_files()
@@ -150,7 +158,7 @@ class Backup(object):
             return 'ftp://{}{}'.format(self.ftp_server,
                                        self.__slashes(self.ftp_path))
         else:
-            basedir = current_app.extensions['alchemydumps'].basedir
+            basedir = Path(self.config.get('BASE_DIR', ''))
             backup_dir = basedir.child('alchemydumps')
             if not backup_dir.exists():
                 backup_dir.mkdir()
@@ -159,10 +167,10 @@ class Backup(object):
     def __get_ftp(self):
 
         # look for FTP configuration
-        server = current_app.config.get('ALCHEMYDUMPS_FTP_SERVER', False)
-        user = current_app.config.get('ALCHEMYDUMPS_FTP_USER', False)
-        password = current_app.config.get('ALCHEMYDUMPS_FTP_PASSWORD', False)
-        path = current_app.config.get('ALCHEMYDUMPS_FTP_PATH', False)
+        server = self.config.get('ALCHEMYDUMPS_FTP_SERVER', False)
+        user = self.config.get('ALCHEMYDUMPS_FTP_USER', '')
+        password = self.config.get('ALCHEMYDUMPS_FTP_PASSWORD', '')
+        path = self.config.get('ALCHEMYDUMPS_FTP_PATH', '')
 
         # try to connect using FTP settings
         if server and user and password:

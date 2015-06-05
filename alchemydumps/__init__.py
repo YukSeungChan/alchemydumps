@@ -1,9 +1,7 @@
 # coding: utf-8
 
 # import third party modules
-from flask.ext.script import Manager
 from sqlalchemy.exc import IntegrityError, InvalidRequestError
-from unipath import Path
 
 # import alchemydumps helpers
 from helpers.autoclean import bw_lists
@@ -12,52 +10,27 @@ from helpers.confirm import confirm
 from helpers.database import AlchemyDumpsDatabase
 
 
-class _AlchemyDumpsConfig(object):
-
-    def __init__(self, db=None, basedir=''):
-        self.db = db
-        self.basedir = Path(basedir).absolute()
-
-
-class AlchemyDumps(object):
-
-    def __init__(self, app=None, db=None, basedir=''):
-        if app is not None and db is not None:
-            self.init_app(app, db, basedir)
-
-    @staticmethod
-    def init_app(app, db, basedir=''):
-        if not hasattr(app, 'extensions'):
-            app.extensions = {}
-        app.extensions['alchemydumps'] = _AlchemyDumpsConfig(db, basedir)
-
-
-AlchemyDumpsCommand = Manager(usage='Backup and restore full SQL database')
-
-
-@AlchemyDumpsCommand.command
-def create():
+def create(base, db_session):
     """Create a backup based on SQLAlchemy mapped classes"""
 
     # create backup files
-    alchemy = AlchemyDumpsDatabase()
+    alchemy = AlchemyDumpsDatabase(base, db_session)
     data = alchemy.get_data()
     backup = Backup()
     date_id = backup.create_id()
-    for class_name in data.keys():
-        name = backup.get_name(date_id, class_name)
-        full_path = backup.create_file(name, data[class_name])
-        rows = len(alchemy.parse_data(data[class_name]))
+    for model_name in data.keys():
+        name = backup.get_name(date_id, model_name)
+        full_path = backup.create_file(name, data[model_name])
+        rows = len(alchemy.parse_data(data[model_name]))
         if full_path:
             print '==> {} rows from {} saved as {}'.format(rows,
-                                                           class_name,
+                                                           model_name,
                                                            full_path)
         else:
             print '==> Error creating {} at {}'.format(name, backup.path)
     backup.close_connection()
 
 
-@AlchemyDumpsCommand.command
 def history():
     """List existing backups"""
 
@@ -80,68 +53,51 @@ def history():
     backup.close_connection()
 
 
-@AlchemyDumpsCommand.option('-d',
-                            '--date',
-                            dest='date_id',
-                            default=False,
-                            help='The date part of a file from the AlchemyDumps\
-                                 folder')
-def restore(date_id):
+def restore(date_id, base, db_session, echo=False):
     """Restore a backup based on the date part of the backup files"""
 
     # check if date/id is valid
-    alchemy = AlchemyDumpsDatabase()
+    alchemy = AlchemyDumpsDatabase(base, db_session)
     backup = Backup()
+    date_id = str(date_id)
     if backup.valid(date_id):
 
         # loop through backup files
-        for mapped_class in alchemy.get_mapped_classes():
-            class_name = mapped_class.__name__
+        for model_class in alchemy.get_mapped_classes():
+            class_name = model_class.__name__
             name = backup.get_name(date_id, class_name)
             if name in backup.files:
 
                 # read file contents
                 contents = backup.read_file(name)
                 fails = list()
-
-                # restore to the db
-                db = alchemy.db()
                 for row in alchemy.parse_data(contents):
                     try:
-                        db.session.merge(row)
-                        db.session.commit()
-                    except (IntegrityError, InvalidRequestError):
-                        db.session.rollback()
+                        db_session.merge(row)
+                        db_session.commit()
+                    except (IntegrityError, InvalidRequestError), e:
+                        print e
+                        db_session.rollback()
                         fails.append(row)
 
                 # print summary
                 status = 'partially' if len(fails) else 'totally'
                 print '==> {} {} restored.'.format(name, status)
-                for f in fails:
-                    print '    Restore of {} failed.'.format(f)
+                if echo:
+                    for f in fails:
+                        print '    Restore of {} failed.'.format(f)
             else:
                 name = backup.get_name(date_id, class_name)
                 msg = '==> No file found for {} ({}{} does not exist).'
                 print msg.format(class_name, backup.path, name)
 
 
-@AlchemyDumpsCommand.option('-d',
-                            '--date',
-                            dest='date_id',
-                            default=False,
-                            help='The date part of a file from the AlchemyDumps\
-                                 folder')
-@AlchemyDumpsCommand.option('-y',
-                            '--assume-yes',
-                            dest='assume_yes',
-                            action='store_true',
-                            default=False,
-                            help='Assume `yes` for all prompts')
 def remove(date_id, assume_yes=False):
     """Remove a series of backup files based on the date part of the files"""
 
     # check if date/id is valid
     backup = Backup()
+    date_id = str(date_id)
     if backup.valid(date_id):
 
         # List files to be deleted
@@ -158,12 +114,6 @@ def remove(date_id, assume_yes=False):
     backup.close_connection()
 
 
-@AlchemyDumpsCommand.option('-y',
-                            '--assume-yes',
-                            dest='assume_yes',
-                            action='store_true',
-                            default=False,
-                            help='Assume `yes` for all prompts')
 def autoclean(assume_yes=False):
     """
     Remove a series of backup files based on the following rules:
